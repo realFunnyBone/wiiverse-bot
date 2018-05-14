@@ -6,7 +6,7 @@ module.exports = {
 // This is the name of the action displayed in the editor.
 //---------------------------------------------------------------------
 
-name: "Send Embed Message",
+name: "Youtube Time Converter",
 
 //---------------------------------------------------------------------
 // Action Section
@@ -14,7 +14,8 @@ name: "Send Embed Message",
 // This is the section the action will fall into.
 //---------------------------------------------------------------------
 
-section: "Embed Message",
+section: "Deprecated",
+
 
 //---------------------------------------------------------------------
 // Action Subtitle
@@ -23,8 +24,7 @@ section: "Embed Message",
 //---------------------------------------------------------------------
 
 subtitle: function(data) {
-	const channels = ['Same Channel', 'Command Author', 'Mentioned User', 'Mentioned Channel', 'Default Channel', 'Temp Variable', 'Server Variable', 'Global Variable']
-	return `${channels[parseInt(data.channel)]}: ${data.varName}`;
+return `Convert into ${data.varName}`;
 },
 
 //---------------------------------------------------------------------
@@ -34,19 +34,32 @@ subtitle: function(data) {
 	 // about the mods for people to see in the list.
 	 //---------------------------------------------------------------------
 
-	 // Who made the mod (If not set, defaults to "DBM Mods")
-	 author: "DBM",
+ // Who made the mod (If not set, defaults to "DBM Mods")
+ author: "General Wrex", //Idea by Tresmos
 
-	 // The version of the mod (Defaults to 1.0.0)
-	 version: "1.8.2",
+ // The version of the mod (Defaults to 1.0.0)
+ version: "1.8.6", //Added in 1.8.6
 
-	 // A short description to show on the mod line for this mod (Must be on a single line)
-	 short_description: "Changed Category",
+ // A short description to show on the mod line for this mod (Must be on a single line)
+ short_description: "Converts YouTube Time Code into numeric time.",
 
-	 // If it depends on any other mods by name, ex: WrexMODS if the mod uses something from WrexMods
+ // If it depends on any other mods by name, ex: WrexMODS if the mod uses something from WrexMods
 
 
-	 //---------------------------------------------------------------------
+ //---------------------------------------------------------------------
+
+//---------------------------------------------------------------------
+// Action Storage Function
+//
+// Stores the relevant variable info for the editor.
+//---------------------------------------------------------------------
+
+variableStorage: function(data, varType) {
+		const type = parseInt(data.storage);
+		if(type !== varType) return;
+		return ([data.varName, 'Time']);
+	},
+
 
 //---------------------------------------------------------------------
 // Action Fields
@@ -56,7 +69,7 @@ subtitle: function(data) {
 // are also the names of the fields stored in the action's JSON data.
 //---------------------------------------------------------------------
 
-fields: ["storage", "varName", "channel", "varName2"],
+fields: ["ytTime", "storage", "varName"],
 
 //---------------------------------------------------------------------
 // Command HTML
@@ -77,27 +90,26 @@ fields: ["storage", "varName", "channel", "varName2"],
 html: function(isEvent, data) {
 	return `
 <div>
+		<p>
+			<u>Mod Info:</u><br>
+			Created by General Wrex!
+		</p>
+</div><br>
+<div>
+<br>
+    Youtube Time:<br>
+	<textarea id="ytTime" class="round" style="width: 35%; resize: none;" type="textarea" rows="1" cols="20"></textarea><br>
 	<div style="float: left; width: 35%;">
-		Source Embed Object:<br>
-		<select id="storage" class="round" onchange="glob.refreshVariableList(this)">
+		Store In:<br>
+		<select id="storage" class="round">
 			${data.variables[1]}
 		</select>
 	</div>
 	<div id="varNameContainer" style="float: right; width: 60%;">
 		Variable Name:<br>
-		<input id="varName" class="round" type="text" list="variableList"><br>
+		<input id="varName" class="round" type="text"><br>
 	</div>
-</div><br><br><br>
-<div style="padding-top: 8px; float: left; width: 35%;">
-	Send To:<br>
-	<select id="channel" class="round" onchange="glob.sendTargetChange(this, 'varNameContainer2')">
-		${data.sendTargets[isEvent ? 1 : 0]}
-	</select>
-</div>
-<div id="varNameContainer2" style="display: none; float: right; width: 60%;">
-	Variable Name:<br>
-	<input id="varName2" class="round" type="text" list="variableList"><br>
-</div>`
+</div>`;
 },
 
 //---------------------------------------------------------------------
@@ -108,11 +120,7 @@ html: function(isEvent, data) {
 // functions for the DOM elements.
 //---------------------------------------------------------------------
 
-init: function() {
-	const {glob, document} = this;
-
-	glob.sendTargetChange(document.getElementById('channel'), 'varNameContainer2')
-},
+init: function() {},
 
 //---------------------------------------------------------------------
 // Action Bot Function
@@ -122,32 +130,75 @@ init: function() {
 // so be sure to provide checks for variable existance.
 //---------------------------------------------------------------------
 
-action: function(cache) {
+action: function (cache) {
+
 	const data = cache.actions[cache.index];
-	const server = cache.server;
 	const storage = parseInt(data.storage);
 	const varName = this.evalMessage(data.varName, cache);
-	const embed = this.getVariable(storage, varName, cache);
-	if(!embed) {
-		this.callNextAction(cache);
-		return;
-	}
 
-	const msg = cache.msg;
-	const channel = parseInt(data.channel);
-	const varName2 = this.evalMessage(data.varName2, cache);
-	const target = this.getSendTarget(channel, varName2, cache);
-	if(target && target.send) {
-		try {
-			target.send({embed}).then(function() {
-				this.callNextAction(cache);
-			}.bind(this)).catch(this.displayError.bind(this, data, cache));
-		} catch(e) {
-			this.displayError(data, cache, e);
+	const ytTime = this.evalMessage(data.ytTime, cache);
+
+	// Taken from https://www.npmjs.com/package/youtube-duration-format
+	function parseDuration(PT, format) {
+		var output = [];
+		var durationInSec = 0;
+		var matches = PT.match(/P(?:(\d*)Y)?(?:(\d*)M)?(?:(\d*)W)?(?:(\d*)D)?T?(?:(\d*)H)?(?:(\d*)M)?(?:(\d*)S)?/i);
+		var parts = [
+		  { // years
+			pos: 1,
+			multiplier: 86400 * 365
+		  },
+		  { // months
+			pos: 2,
+			multiplier: 86400 * 30
+		  },
+		  { // weeks
+			pos: 3,
+			multiplier: 604800
+		  },
+		  { // days
+			pos: 4,
+			multiplier: 86400
+		  },
+		  { // hours
+			pos: 5,
+			multiplier: 3600
+		  },
+		  { // minutes
+			pos: 6,
+			multiplier: 60
+		  },
+		  { // seconds
+			pos: 7,
+			multiplier: 1
+		  }
+		];
+
+		for (var i = 0; i < parts.length; i++) {
+		  if (typeof matches[parts[i].pos] != 'undefined') {
+			durationInSec += parseInt(matches[parts[i].pos]) * parts[i].multiplier;
+		  }
 		}
-	} else {
-		this.callNextAction(cache);
-	}
+		var totalSec = durationInSec;
+		// Hours extraction
+		if (durationInSec > 3599) {
+		  output.push(parseInt(durationInSec / 3600));
+		  durationInSec %= 3600;
+		}
+		// Minutes extraction with leading zero
+		output.push(('0' + parseInt(durationInSec / 60)).slice(-2));
+		// Seconds extraction with leading zero
+		output.push(('0' + durationInSec % 60).slice(-2));
+		if (format === undefined)
+		  return output.join(':');
+		else if (format === 'sec')
+		  return totalSec;
+	};
+
+
+	this.storeValue(parseDuration(ytTime), storage, varName, cache);
+
+    this.callNextAction(cache);
 },
 
 //---------------------------------------------------------------------

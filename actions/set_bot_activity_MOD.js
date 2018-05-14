@@ -6,7 +6,7 @@ module.exports = {
 // This is the name of the action displayed in the editor.
 //---------------------------------------------------------------------
 
-name: "Send Embed Message",
+name: "Set Bot Activity",
 
 //---------------------------------------------------------------------
 // Action Section
@@ -14,7 +14,7 @@ name: "Send Embed Message",
 // This is the section the action will fall into.
 //---------------------------------------------------------------------
 
-section: "Embed Message",
+section: "Bot Client Control",
 
 //---------------------------------------------------------------------
 // Action Subtitle
@@ -23,30 +23,10 @@ section: "Embed Message",
 //---------------------------------------------------------------------
 
 subtitle: function(data) {
-	const channels = ['Same Channel', 'Command Author', 'Mentioned User', 'Mentioned Channel', 'Default Channel', 'Temp Variable', 'Server Variable', 'Global Variable']
-	return `${channels[parseInt(data.channel)]}: ${data.varName}`;
+
+	const activities = ["Playing", "Listening", "Watching", "Streaming Twitch"];
+	return `${activities[data.activity]} ${data.nameText}`;
 },
-
-//---------------------------------------------------------------------
-	 // DBM Mods Manager Variables (Optional but nice to have!)
-	 //
-	 // These are variables that DBM Mods Manager uses to show information
-	 // about the mods for people to see in the list.
-	 //---------------------------------------------------------------------
-
-	 // Who made the mod (If not set, defaults to "DBM Mods")
-	 author: "DBM",
-
-	 // The version of the mod (Defaults to 1.0.0)
-	 version: "1.8.2",
-
-	 // A short description to show on the mod line for this mod (Must be on a single line)
-	 short_description: "Changed Category",
-
-	 // If it depends on any other mods by name, ex: WrexMODS if the mod uses something from WrexMods
-
-
-	 //---------------------------------------------------------------------
 
 //---------------------------------------------------------------------
 // Action Fields
@@ -56,7 +36,7 @@ subtitle: function(data) {
 // are also the names of the fields stored in the action's JSON data.
 //---------------------------------------------------------------------
 
-fields: ["storage", "varName", "channel", "varName2"],
+fields: ["activity", "nameText", "url"],
 
 //---------------------------------------------------------------------
 // Command HTML
@@ -76,27 +56,31 @@ fields: ["storage", "varName", "channel", "varName2"],
 
 html: function(isEvent, data) {
 	return `
-<div>
-	<div style="float: left; width: 35%;">
-		Source Embed Object:<br>
-		<select id="storage" class="round" onchange="glob.refreshVariableList(this)">
-			${data.variables[1]}
-		</select>
+<div id ="wrexdiv" style="width: 550px; height: 350px; overflow-y: scroll;">
+  <div>
+		<p>
+			<u>Mod Info:</u><br>
+			Created by Lasse!<br>
+			Edited by General Wrex<br><br>
+			Streaming Activity only works with Twitch.<br>
+			This action requires the latest discord.js version!<br>
+			Check out this video: https://youtu.be/mrrtj5nlV58<br>
+		</p>
 	</div>
-	<div id="varNameContainer" style="float: right; width: 60%;">
-		Variable Name:<br>
-		<input id="varName" class="round" type="text" list="variableList"><br>
-	</div>
-</div><br><br><br>
-<div style="padding-top: 8px; float: left; width: 35%;">
-	Send To:<br>
-	<select id="channel" class="round" onchange="glob.sendTargetChange(this, 'varNameContainer2')">
-		${data.sendTargets[isEvent ? 1 : 0]}
-	</select>
-</div>
-<div id="varNameContainer2" style="display: none; float: right; width: 60%;">
-	Variable Name:<br>
-	<input id="varName2" class="round" type="text" list="variableList"><br>
+
+  <div style="float: left; width: 70%;">
+  Activity:<br>
+  <select id="activity" class="round">
+     <option value="0">Playing</option>
+     <option value="1">Listening</option>
+     <option value="2">Watching</option>
+     <option value="3">Streaming Twitch</option>
+   </select><br>
+     Name: (Shown to the right of the activity)<br>
+    <input id="nameText" class="round" type="text"><br>
+     Twitch Stream URL: (Streaming Twitch Only)<br>
+    <input id="url" class="round" type="text">
+  </div>
 </div>`
 },
 
@@ -109,9 +93,6 @@ html: function(isEvent, data) {
 //---------------------------------------------------------------------
 
 init: function() {
-	const {glob, document} = this;
-
-	glob.sendTargetChange(document.getElementById('channel'), 'varNameContainer2')
 },
 
 //---------------------------------------------------------------------
@@ -123,28 +104,49 @@ init: function() {
 //---------------------------------------------------------------------
 
 action: function(cache) {
+	const botClient = this.getDBM().Bot.bot.user;
 	const data = cache.actions[cache.index];
-	const server = cache.server;
-	const storage = parseInt(data.storage);
-	const varName = this.evalMessage(data.varName, cache);
-	const embed = this.getVariable(storage, varName, cache);
-	if(!embed) {
-		this.callNextAction(cache);
-		return;
+
+	const nameText = this.evalMessage(data.nameText, cache)
+	const url = this.evalMessage(data.url, cache)
+
+
+	const activity = parseInt(data.activity);
+
+	let target;
+	if(activity >= 0) {
+		switch(activity) {
+			case 0:
+				target = 'PLAYING';
+				break;
+			case 1:
+				target = 'LISTENING';
+				break;
+			case 2:
+				target = 'WATCHING';
+				break;
+			case 3:
+				target = 'STREAMING';
+				break;
+		}
 	}
 
-	const msg = cache.msg;
-	const channel = parseInt(data.channel);
-	const varName2 = this.evalMessage(data.varName2, cache);
-	const target = this.getSendTarget(channel, varName2, cache);
-	if(target && target.send) {
-		try {
-			target.send({embed}).then(function() {
-				this.callNextAction(cache);
-			}.bind(this)).catch(this.displayError.bind(this, data, cache));
-		} catch(e) {
-			this.displayError(data, cache, e);
+	if(botClient) {
+
+		let obj;
+
+		if(nameText && activity){
+			obj = { game:{ name: nameText, type: target }}
+
+			if(url){
+				obj = { game:{ name: nameText, type: target, url: url } }
+			}
 		}
+
+		botClient.setPresence(obj).then(function() {
+			this.callNextAction(cache);
+			}.bind(this))
+		.catch(err=>console.log(err));
 	} else {
 		this.callNextAction(cache);
 	}
